@@ -8,6 +8,7 @@ from keras_hub.src.models.qwen.qwen_tokenizer import QwenTokenizer
     [
         "keras_hub.models.QwenCausalLMPreprocessor",
         "keras_hub.models.Qwen2CausalLMPreprocessor",
+        "keras_hub.models.Qwen3CausalLMPreprocessor",
     ]
 )
 class QwenCausalLMPreprocessor(CausalLMPreprocessor):

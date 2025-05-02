@@ -53,6 +53,8 @@ class QwenTransformerDecoder(keras.layers.Layer):
         dropout=0,
         use_sliding_window_attention=False,
         sliding_window_size=4096,
+        use_qk_norm = False,
+        head_dim = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -73,6 +75,8 @@ class QwenTransformerDecoder(keras.layers.Layer):
         self.kernel_initializer = keras.initializers.get(kernel_initializer)
 
         self.supports_masking = True
+        self.use_qk_norm = use_qk_norm
+        self.head_dim = head_dim
 
     def build(self, decoder_sequence_shape):
         self._decoder_sequence_shape = decoder_sequence_shape
@@ -89,6 +93,8 @@ class QwenTransformerDecoder(keras.layers.Layer):
             use_sliding_window_attention=self.use_sliding_window_attention,
             sliding_window_size=self.sliding_window_size,
             dtype=self.dtype_policy,
+            use_qk_norm=self.use_qk_norm,
+            head_dim = self.head_dim,
             name="self_attention",
         )
         self._self_attention_layer.build(decoder_sequence_shape)
@@ -306,6 +312,8 @@ class QwenTransformerDecoder(keras.layers.Layer):
                     self.kernel_initializer
                 ),
                 "dropout": self.dropout,
+                "head_dim":self.head_dim,
+                "use_qk_norm":self.use_qk_norm,
             }
         )
         return config

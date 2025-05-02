@@ -18,6 +18,7 @@ def _qwen_kernel_initializer(stddev=0.02):
     [
         "keras_hub.models.QwenBackbone",
         "keras_hub.models.Qwen2Backbone",
+        "keras_hub.models.Qwen3Backbone",
     ]
 )
 class QwenBackbone(Backbone):
@@ -107,6 +108,8 @@ class QwenBackbone(Backbone):
         tie_word_embeddings=True,
         use_sliding_window_attention=False,
         sliding_window_size=32768,
+        use_qk_norm=False,
+        head_dim=None,
         **kwargs,
     ):
         # === Layers ===
@@ -133,6 +136,8 @@ class QwenBackbone(Backbone):
                 dtype=dtype,
                 use_sliding_window_attention=use_sliding_window_attention,
                 sliding_window_size=sliding_window_size,
+                use_qk_norm = use_qk_norm,
+                head_dim = head_dim,
                 name=f"transformer_layer_{i}",
             )
             self.transformer_layers.append(layer)
@@ -177,6 +182,8 @@ class QwenBackbone(Backbone):
         self.tie_word_embeddings = tie_word_embeddings
         self.use_sliding_window_attention = use_sliding_window_attention
         self.sliding_window_size = sliding_window_size
+        self.use_qk_norm = use_qk_norm
+        self.head_dim = head_dim
 
     def get_config(self):
         config = super().get_config()
@@ -197,6 +204,8 @@ class QwenBackbone(Backbone):
                     self.use_sliding_window_attention
                 ),
                 "sliding_window_size": self.sliding_window_size,
+                "use_qk_norm":self.use_qk_norm,
+                "head_dim":self.head_dim,
             }
         )
         return config

@@ -14,6 +14,7 @@ from keras_hub.src.utils.tensor_utils import any_equal
     [
         "keras_hub.models.QwenCausalLM",
         "keras_hub.models.Qwen2CausalLM",
+        "keras_hub.models.Qwen3CausalLM",
     ]
 )
 class QwenCausalLM(CausalLM):

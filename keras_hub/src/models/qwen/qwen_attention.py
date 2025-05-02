@@ -6,7 +6,7 @@ from keras import ops
 from keras_hub.src.layers.modeling.rotary_embedding import RotaryEmbedding
 from keras_hub.src.utils.keras_utils import clone_initializer
 from keras_hub.src.utils.keras_utils import fused_attention_op_available
-
+from keras_hub.src.models.qwen.qwen_layernorm import QwenLayerNorm
 
 class QwenAttention(keras.layers.Layer):
     """A multi-head attention layer for Qwen models
@@ -41,6 +41,8 @@ class QwenAttention(keras.layers.Layer):
         dropout=0,
         use_sliding_window_attention=False,
         sliding_window_size=4096,
+        use_qk_norm=False,
+        head_dim = None,
         **kwargs,
     ):
         super().__init__(
@@ -63,6 +65,8 @@ class QwenAttention(keras.layers.Layer):
         self.rope_scaling_factor = rope_scaling_factor
         self.use_sliding_window_attention = use_sliding_window_attention
         self.sliding_window_size = sliding_window_size
+        self.use_qk_norm = use_qk_norm
+        self.head_dim = head_dim
 
     def build(self, inputs_shape):
         # Einsum variables:
@@ -74,7 +78,7 @@ class QwenAttention(keras.layers.Layer):
         # v = num key/value heads
         # h = head dim
         hidden_dim = inputs_shape[-1]
-        head_dim = hidden_dim // self.num_query_heads
+        head_dim = self.head_dim or hidden_dim // self.num_query_heads
         self._inv_norm_factor = 1.0 / math.sqrt(head_dim)
         self._query_dense = keras.layers.EinsumDense(
             equation="bqm,muh->bquh",
@@ -142,7 +146,17 @@ class QwenAttention(keras.layers.Layer):
             scaling_factor=self.rope_scaling_factor,
             dtype=self.dtype_policy,
         )
-
+        if self.use_qk_norm:
+            self.q_norm = QwenLayerNorm(
+                dtype=self.dtype_policy,
+                name="query_layernorm",
+            )
+            self.q_norm.build((None, None, self.num_query_heads, head_dim))
+            self.k_norm = QwenLayerNorm(
+                dtype=self.dtype_policy,
+                name="key_layernorm",
+            )
+            self.k_norm.build((None, None, self.num_key_value_heads, head_dim))
         self._dot_product_equation = "bquh,bkuh->buqk"
         self._combine_equation = "buqk,bkuh->bquh"
 
@@ -176,12 +190,15 @@ class QwenAttention(keras.layers.Layer):
         )
 
         query = self._query_dense(hidden_states)
-
+        if self.use_qk_norm:
+            query = self.q_norm(query)
         # Compute RoPE for queries
         query = self.rotary_embedding_layer(query, start_index=start_index)
 
         def _compute_key_value(x):
             key, value = self._key_dense(x), self._value_dense(x)
+            if self.use_qk_norm:
+                key = self.k_norm(key)
             # Compute RoPE for keys
             key = self.rotary_embedding_layer(key, start_index=start_index)
             return key, value
@@ -353,6 +370,8 @@ class QwenAttention(keras.layers.Layer):
                     self.use_sliding_window_attention
                 ),
                 "sliding_window_size": self.sliding_window_size,
+                "use_qk_norm":self.use_qk_norm,
+                "head_dim":self.head_dim,
             }
         )
         return config

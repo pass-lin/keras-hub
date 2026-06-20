@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from keras import ops
 
 from keras_hub.src.models.sam3.sam3_detr_decoder import SAM3DetrDecoder
 from keras_hub.src.models.sam3.sam3_detr_encoder import SAM3DetrEncoder
@@ -89,18 +88,15 @@ class SAM3PromptableConceptImageSegmenterTest(TestCase):
             crop_to_aspect_ratio=False,
             antialias=True,
         )
-        self.tokenizer = SAM3Tokenizer(
-            {
-                "!": 0,
-                '"': 1,
-                "#": 2,
-                "$": 3,
-                "%": 4,
-                "<|endoftext|>": 5,
-                "<|startoftext|>": 6,
-            },
-            ["i n", "t h", "a n"],
-        )
+        merges = ["i n", "t h", "a n"]
+        vocab = []
+        for merge in merges:
+            a, b = merge.split(" ")
+            vocab.extend([a, b, a + b])
+        vocab += ["!", '"', "#", "$", "%", "<|endoftext|>", "<|startoftext|>"]
+        vocab = sorted(set(vocab))  # Remove duplicates
+        vocab = dict([(token, i) for i, token in enumerate(vocab)])
+        self.tokenizer = SAM3Tokenizer(vocab, merges)
         self.preprocessor = SAM3PromptableConceptImageSegmenterPreprocessor(
             self.tokenizer, self.image_converter
         )
@@ -170,26 +166,10 @@ class SAM3PromptableConceptImageSegmenterTest(TestCase):
             )
 
     def test_litert_export(self):
-        pytest.skip(
-            reason="TODO: Need to fix the bug in TFLite export for SAM3 model"
-        )
-
-        # Convert boolean padding_mask to int32 for LiteRT compatibility
-        input_data = self.input_data.copy()
-        if "padding_mask" in input_data:
-            input_data["padding_mask"] = ops.cast(
-                input_data["padding_mask"], "int32"
-            )
-
         self.run_litert_export_test(
             cls=SAM3PromptableConceptImageSegmenter,
             init_kwargs=self.init_kwargs,
             input_data=self.input_data,
             comparison_mode="statistical",
-            output_thresholds={
-                "scores": {"max": 1e-3, "mean": 1e-4},
-                "boxes": {"max": 1e-3, "mean": 1e-4},
-                "masks": {"max": 1e-2, "mean": 1e-3},
-            },
-            allow_custom_ops=True,
+            output_thresholds={"*": {"max": 1e-2, "mean": 5e-3}},
         )

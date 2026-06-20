@@ -45,6 +45,7 @@ CONFIG_FILE = "config.json"
 TOKENIZER_CONFIG_FILE = "tokenizer.json"
 AUDIO_CONVERTER_CONFIG_FILE = "audio_converter.json"
 IMAGE_CONVERTER_CONFIG_FILE = "image_converter.json"
+VIDEO_CONVERTER_CONFIG_FILE = "video_converter.json"
 TASK_CONFIG_FILE = "task.json"
 PREPROCESSOR_CONFIG_FILE = "preprocessor.json"
 METADATA_FILE = "metadata.json"
@@ -271,7 +272,13 @@ def tf_copy_gfile_to_cache(preset, path):
 
     url = os.path.join(preset, path)
     model_dir = preset.replace("://", "_").replace("-", "_").replace("/", "_")
-    local_path = os.path.join(base_dir, "models", model_dir, path)
+    target_dir = os.path.abspath(os.path.join(base_dir, "models", model_dir))
+    local_path = os.path.abspath(os.path.join(target_dir, path))
+
+    if os.path.commonpath([target_dir, local_path]) != target_dir:
+        raise ValueError(
+            f"Invalid path: '{path}'. It escapes the target directory."
+        )
 
     if not os.path.exists(local_path):
         print_msg(f"Downloading data from {url}")
@@ -285,7 +292,7 @@ def tf_copy_gfile_to_cache(preset, path):
             # Work around this bug.
             os.remove(local_path)
             if isinstance(
-                e, tf.errors.PermissionDeniedError, tf.errors.NotFoundError
+                e, (tf.errors.PermissionDeniedError, tf.errors.NotFoundError)
             ):
                 raise FileNotFoundError(
                     f"`{path}` doesn't exist in preset directory `{preset}`.",
@@ -620,6 +627,10 @@ class PresetLoader:
         """Load an image converter layer from the preset."""
         raise NotImplementedError
 
+    def load_video_converter(self, cls, **kwargs):
+        """Load a video converter layer from the preset."""
+        raise NotImplementedError
+
     def load_task(self, cls, load_weights, load_task_weights, **kwargs):
         """Load a task model from the preset.
 
@@ -679,6 +690,10 @@ class KerasPresetLoader(PresetLoader):
 
     def load_image_converter(self, cls, **kwargs):
         converter_config = load_json(self.preset, IMAGE_CONVERTER_CONFIG_FILE)
+        return self._load_serialized_object(converter_config, **kwargs)
+
+    def load_video_converter(self, cls, **kwargs):
+        converter_config = load_json(self.preset, VIDEO_CONVERTER_CONFIG_FILE)
         return self._load_serialized_object(converter_config, **kwargs)
 
     def load_task(self, cls, load_weights, load_task_weights, **kwargs):
@@ -874,6 +889,9 @@ class KerasPresetSaver:
     def save_image_converter(self, converter):
         self._save_serialized_object(converter, IMAGE_CONVERTER_CONFIG_FILE)
 
+    def save_video_converter(self, converter):
+        self._save_serialized_object(converter, VIDEO_CONVERTER_CONFIG_FILE)
+
     def save_task(self, task, max_shard_size=10):
         # Save task specific config and weights.
         self._save_serialized_object(task, TASK_CONFIG_FILE)
@@ -891,7 +909,7 @@ class KerasPresetSaver:
         # Save preprocessor.
         if task.preprocessor and hasattr(task.preprocessor, "save_to_preset"):
             task.preprocessor.save_to_preset(self.preset_dir)
-        else:
+        elif task.preprocessor is not None:
             # Allow saving a `keras.Layer` that is not a preprocessor subclass.
             self.save_preprocessor(task.preprocessor)
 
@@ -930,8 +948,8 @@ class KerasPresetSaver:
         tasks = list_subclasses(Task)
         tasks = filter(lambda x: x.backbone_cls is type(layer), tasks)
         tasks = [task.__base__.__name__ for task in tasks]
-        # Keep task list alphabetical.
-        tasks = sorted(tasks)
+        # Keep task list alphabetical and deduplicated.
+        tasks = sorted(set(tasks))
 
         keras_version = keras.version() if hasattr(keras, "version") else None
         metadata = {

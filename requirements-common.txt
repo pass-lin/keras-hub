@@ -2,7 +2,9 @@
 dm-tree
 regex
 rich
-kagglehub
+kagglehub!=1.0.1
+tokenizers
+sentencepiece
 # Tooling deps.
 pre-commit
 astor
@@ -14,9 +16,8 @@ build
 namex
 # Optional deps.
 rouge-score
-sentencepiece
 tensorflow-datasets
 safetensors
 pillow
 openvino
-transformers<5.0.0
+transformers
